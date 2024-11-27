@@ -1,9 +1,9 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use chrono::Utc;
 use std::{env, fs};
 
 const BLOCK_SIZE: usize = 4096; // Tamanho de cada bloco (4 KB)
@@ -74,7 +74,12 @@ impl MetadataStore {
 }
 
 #[allow(dead_code)]
-fn create_file_metadata(file_name: &str, directory_path: &str, permissions: &str, size: u64) -> FileMetadata {
+fn create_file_metadata(
+    file_name: &str,
+    directory_path: &str,
+    permissions: &str,
+    size: u64,
+) -> FileMetadata {
     let now = Utc::now().to_rfc3339();
     FileMetadata {
         path: format!("{}/{}", directory_path, file_name), // Define o caminho completo do arquivo
@@ -98,13 +103,18 @@ fn save_directory_metadata(directory: &DirectoryMetadata, path: &str) -> io::Res
     Ok(())
 }
 
+#[allow(dead_code)]
 fn load_directory_metadata(path: &str) -> io::Result<DirectoryMetadata> {
     let json = fs::read_to_string(path)?;
     let directory: DirectoryMetadata = serde_json::from_str(&json)?;
     Ok(directory)
 }
 
-fn save_hierarchy(root_directory: &DirectoryMetadata, metadata_store: &MetadataStore, path: &str) -> io::Result<()> {
+fn save_hierarchy(
+    root_directory: &DirectoryMetadata,
+    metadata_store: &MetadataStore,
+    path: &str,
+) -> io::Result<()> {
     let data = serde_json::to_string_pretty(&(root_directory, metadata_store))?;
     fs::write(path, data)?;
     Ok(())
@@ -112,7 +122,8 @@ fn save_hierarchy(root_directory: &DirectoryMetadata, metadata_store: &MetadataS
 
 fn load_hierarchy(path: &str) -> io::Result<(DirectoryMetadata, MetadataStore)> {
     let data = fs::read_to_string(path)?;
-    let (root_directory, metadata_store): (DirectoryMetadata, MetadataStore) = serde_json::from_str(&data)?;
+    let (root_directory, metadata_store): (DirectoryMetadata, MetadataStore) =
+        serde_json::from_str(&data)?;
     Ok((root_directory, metadata_store))
 }
 
@@ -130,7 +141,11 @@ impl BlockManager {
             OpenOptions::new().read(true).write(true).open(disk_path)?
         } else {
             // Caso contrário, cria e formata o arquivo de disco
-            let mut file = OpenOptions::new().read(true).write(true).create(true).open(disk_path)?;
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(disk_path)?;
             file.set_len((BLOCK_SIZE * TOTAL_BLOCKS) as u64)?;
             BlockManager::format(&mut file)?;
             file
@@ -179,14 +194,20 @@ impl BlockManager {
             BlockManager::save_free_blocks(&mut self.file, &self.free_blocks)?;
             Ok(index)
         } else {
-            Err(io::Error::new(io::ErrorKind::Other, "No free blocks available"))
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                "No free blocks available",
+            ))
         }
     }
 
     /// Libera um bloco pelo índice
     pub fn free_block(&mut self, index: usize) -> io::Result<()> {
         if index >= TOTAL_BLOCKS {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid block index"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid block index",
+            ));
         }
 
         self.free_blocks[index] = true;
@@ -198,10 +219,16 @@ impl BlockManager {
     /// Escreve dados em um bloco
     pub fn write_block(&mut self, index: usize, data: &[u8]) -> io::Result<()> {
         if index >= TOTAL_BLOCKS {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid block index"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid block index",
+            ));
         }
         if data.len() > BLOCK_SIZE {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Data exceeds block size"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Data exceeds block size",
+            ));
         }
 
         let offset = 4 + TOTAL_BLOCKS + index * BLOCK_SIZE; // Pula o cabeçalho e o mapa de blocos
@@ -214,7 +241,10 @@ impl BlockManager {
     /// Lê dados de um bloco
     pub fn read_block(&mut self, index: usize) -> io::Result<Vec<u8>> {
         if index >= TOTAL_BLOCKS {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid block index"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid block index",
+            ));
         }
 
         let offset = 4 + TOTAL_BLOCKS + index * BLOCK_SIZE; // Pula o cabeçalho e o mapa de blocos
@@ -226,13 +256,16 @@ impl BlockManager {
     }
 }
 
+#[allow(dead_code)]
 fn create_file(
     path: &str,
     metadata_store: &mut MetadataStore,
+    current_directory: &DirectoryMetadata,
     permissions: &str,
 ) -> io::Result<()> {
+    let resolved_path = resolve_path(current_directory, path);
     let metadata = FileMetadata {
-        path: path.to_string(), // Define o caminho completo
+        path: resolved_path.clone(),
         permissions: permissions.to_string(),
         created_at: Utc::now().to_rfc3339(),
         modified_at: Utc::now().to_rfc3339(),
@@ -240,18 +273,18 @@ fn create_file(
         block_indices: vec![],
     };
 
-    metadata_store.add_file(path, metadata);
+    metadata_store.add_file(&resolved_path, metadata);
 
-    println!("Arquivo '{}' criado.", path);
+    println!("Arquivo '{}' criado.", resolved_path);
     Ok(())
 }
 
-fn create_directory(
-    name: &str,
-    parent_directory: &mut DirectoryMetadata,
-) -> io::Result<()> {
+fn create_directory(name: &str, parent_directory: &mut DirectoryMetadata) -> io::Result<()> {
     if parent_directory.subdirectories.contains_key(name) {
-        return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Directory already exists"));
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Directory already exists",
+        ));
     }
 
     let now = Utc::now().to_rfc3339();
@@ -263,28 +296,72 @@ fn create_directory(
         subdirectories: HashMap::new(),
     };
 
-    parent_directory.subdirectories.insert(name.to_string(), new_directory);
+    parent_directory
+        .subdirectories
+        .insert(name.to_string(), new_directory);
+
+    // Atualizar o timestamp do diretório pai
+    update_directory_modified_time(parent_directory);
+
     Ok(())
 }
 
-#[allow(dead_code)]
 fn create_file_in_directory(
     file_name: &str,
     directory: &mut DirectoryMetadata,
     metadata_store: &mut MetadataStore,
-    _block_manager: &mut BlockManager,
     permissions: &str,
 ) -> io::Result<()> {
+    // Verificar se o arquivo já existe no diretório atual
     if directory.files.contains_key(file_name) {
-        return Err(io::Error::new(io::ErrorKind::AlreadyExists, "File already exists in this directory"));
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "File already exists in this directory",
+        ));
     }
 
+    // Criar metadados do arquivo
     let metadata = create_file_metadata(file_name, &directory.name, permissions, 0);
 
-    directory.files.insert(file_name.to_string(), metadata.clone());
-    metadata_store.add_file(&metadata.path.clone(), metadata);
+    // Inserir o arquivo nos metadados do diretório
+    directory
+        .files
+        .insert(file_name.to_string(), metadata.clone());
 
-    println!("Arquivo '{}' criado no diretório '{}'", file_name, directory.name);
+    // Atualizar o armazenamento global de metadados
+    metadata_store.add_file(&metadata.path, metadata.clone());
+
+    // Atualizar o tempo do diretório modificado
+    update_directory_modified_time(directory);
+
+    println!(
+        "Arquivo '{}' criado no diretório '{}'",
+        file_name, directory.name
+    );
+    Ok(())
+}
+
+fn remove_file_from_directory(
+    file_name: &str,
+    directory: &mut DirectoryMetadata,
+    metadata_store: &mut MetadataStore,
+) -> io::Result<()> {
+    if directory.files.remove(file_name).is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "File not found in this directory",
+        ));
+    }
+
+    metadata_store.remove_file_metadata(file_name);
+
+    // Atualizar o timestamp do diretório
+    update_directory_modified_time(directory);
+
+    println!(
+        "Arquivo '{}' removido do diretório '{}'",
+        file_name, directory.name
+    );
     Ok(())
 }
 
@@ -293,11 +370,14 @@ fn read_file(
     metadata_store: &MetadataStore,
     block_manager: &mut BlockManager,
 ) -> io::Result<String> {
-    let metadata = metadata_store.get_file_metadata(path).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "File not found")
-    })?;
+    let metadata = metadata_store
+        .get_file_metadata(path)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "File not found"))?;
 
-    println!("Blocos alocados para o arquivo '{}': {:?}", path, metadata.block_indices); // Depuração
+    println!(
+        "Blocos alocados para o arquivo '{}': {:?}",
+        path, metadata.block_indices
+    ); // Depuração
 
     let mut content = Vec::new();
 
@@ -309,7 +389,10 @@ fn read_file(
     content.truncate(metadata.size as usize);
 
     let content_str = String::from_utf8(content).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidData, "File contains invalid UTF-8 data")
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "File contains invalid UTF-8 data",
+        )
     })?;
 
     Ok(content_str)
@@ -332,10 +415,12 @@ fn write_to_file(
     data: &str,
     metadata_store: &mut MetadataStore,
     block_manager: &mut BlockManager,
+    current_directory: &DirectoryMetadata,
 ) -> io::Result<()> {
-    let metadata = metadata_store.get_file_metadata(path).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "File not found")
-    })?;
+    let resolved_path = resolve_path(current_directory, path);
+    let metadata = metadata_store
+        .get_file_metadata(&resolved_path)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "File not found"))?;
 
     let mut updated_metadata = metadata.clone();
     let mut remaining_data = data.as_bytes();
@@ -360,6 +445,7 @@ fn write_to_file(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn remove_file(
     path: &str,
     metadata_store: &mut MetadataStore,
@@ -381,20 +467,23 @@ fn remove_file(
     Ok(())
 }
 
-fn remove_directory(
-    name: &str,
-    parent_directory: &mut DirectoryMetadata,
-) -> io::Result<()> {
+fn remove_directory(name: &str, parent_directory: &mut DirectoryMetadata) -> io::Result<()> {
     if let Some(directory) = parent_directory.subdirectories.get(name) {
         if !directory.files.is_empty() || !directory.subdirectories.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Directory is not empty"));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Directory is not empty",
+            ));
         }
 
         parent_directory.subdirectories.remove(name);
         println!("Diretório '{}' removido com sucesso.", name);
         Ok(())
     } else {
-        Err(io::Error::new(io::ErrorKind::NotFound, "Directory not found"))
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Directory not found",
+        ))
     }
 }
 
@@ -408,25 +497,58 @@ fn change_directory(
         return Ok(());
     }
 
-    let mut target = current_directory.clone();
+    let mut target = if path.starts_with('/') {
+        root_directory.clone()
+    } else {
+        current_directory.clone()
+    };
+
     for part in path.split('/') {
         if part == ".." {
-            // Voltar para o diretório pai
-            if target.name == "/" {
-                continue;
-            }
-            // Atualize para o pai simulando
-            // Aqui é necessário manter o caminho para voltar corretamente
+            // Voltar para o diretório pai (não implementado totalmente)
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Parent navigation not implemented",
+            ));
         } else if let Some(subdir) = target.subdirectories.get(part) {
             target = subdir.clone();
         } else {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "Directory not found"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Directory not found",
+            ));
         }
     }
 
     *current_directory = target;
     println!("Diretório atual: {}", current_directory.name);
     Ok(())
+}
+
+#[allow(dead_code)]
+fn resolve_path(current_directory: &DirectoryMetadata, path: &str) -> String {
+    if path.starts_with('/') {
+        path.to_string() // Caminho absoluto
+    } else {
+        format!("{}/{}", current_directory.name.trim_end_matches('/'), path) // Caminho relativo
+    }
+}
+
+#[allow(dead_code)]
+fn update_directory_modified_time(directory: &mut DirectoryMetadata) {
+    directory.modified_at = Utc::now().to_rfc3339();
+}
+
+fn save_current_directory(current_directory: &DirectoryMetadata, path: &str) -> io::Result<()> {
+    let json = serde_json::to_string_pretty(current_directory)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
+fn load_current_directory(path: &str) -> io::Result<DirectoryMetadata> {
+    let json = fs::read_to_string(path)?;
+    let directory: DirectoryMetadata = serde_json::from_str(&json)?;
+    Ok(directory)
 }
 
 fn main() -> io::Result<()> {
@@ -445,33 +567,26 @@ fn main() -> io::Result<()> {
 
     let root_directory_path = "root_directory.json";
 
-    // Carregar ou criar o diretório raiz
-    let _root_directory = if Path::new(root_directory_path).exists() {
-        load_directory_metadata(root_directory_path)?
-    } else {
-        DirectoryMetadata {
-            name: "/".to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            modified_at: Utc::now().to_rfc3339(),
-            files: HashMap::new(),
-            subdirectories: HashMap::new(),
-        }
-    };
-
     let (mut root_directory, mut metadata_store) = if Path::new("filesystem.json").exists() {
         load_hierarchy("filesystem.json")?
     } else {
-        (DirectoryMetadata {
-            name: "/".to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            modified_at: Utc::now().to_rfc3339(),
-            files: HashMap::new(),
-            subdirectories: HashMap::new(),
-        }, MetadataStore::new())
+        (
+            DirectoryMetadata {
+                name: "/".to_string(),
+                created_at: Utc::now().to_rfc3339(),
+                modified_at: Utc::now().to_rfc3339(),
+                files: HashMap::new(),
+                subdirectories: HashMap::new(),
+            },
+            MetadataStore::new(),
+        )
     };
 
-    // Adicione logo após a inicialização do root_directory
-    let mut current_directory = root_directory.clone(); // Começa no diretório raiz
+    let mut current_directory = if Path::new("current_directory.json").exists() {
+        load_current_directory("current_directory.json")?
+    } else {
+        root_directory.clone()
+    };
 
     // Obter argumentos de linha de comando
     let args: Vec<String> = env::args().collect();
@@ -493,9 +608,16 @@ fn main() -> io::Result<()> {
             } else {
                 let file_name = &args[2];
                 let permissions = &args[3];
-                create_file(file_name, &mut metadata_store, permissions)?;
+
+                create_file_in_directory(
+                    file_name,
+                    &mut current_directory, // Use o diretório atual
+                    &mut metadata_store,
+                    permissions,
+                )?;
             }
         }
+
         "read" => {
             if args.len() < 3 {
                 println!("Uso: read <file_name>");
@@ -513,7 +635,13 @@ fn main() -> io::Result<()> {
             } else {
                 let file_name = &args[2];
                 let data = &args[3];
-                write_to_file(file_name, data, &mut metadata_store, &mut block_manager)?;
+                write_to_file(
+                    file_name,
+                    data,
+                    &mut metadata_store,
+                    &mut block_manager,
+                    &current_directory,
+                )?;
             }
         }
         "remove" => {
@@ -521,7 +649,7 @@ fn main() -> io::Result<()> {
                 println!("Uso: remove <file_name>");
             } else {
                 let file_name = &args[2];
-                remove_file(file_name, &mut metadata_store, &mut block_manager)?;
+                remove_file_from_directory(file_name, &mut current_directory, &mut metadata_store)?;
             }
         }
         "mkdir" => {
@@ -529,11 +657,17 @@ fn main() -> io::Result<()> {
                 println!("Uso: mkdir <directory_name>");
             } else {
                 let dir_name = &args[2];
-                create_directory(dir_name, &mut root_directory)?;
+                if let Err(e) = create_directory(dir_name, &mut current_directory) {
+                    eprintln!("Erro ao criar diretório: {}", e);
+                } else {
+                    save_hierarchy(&root_directory, &metadata_store, "filesystem.json")?;
+                    save_current_directory(&current_directory, "current_directory.json")?;
+                }
             }
         }
+
         "ls" => {
-            list_directory(&root_directory);
+            list_directory(&current_directory); // Liste o conteúdo do diretório atual
         }
         "rmdir" => {
             if args.len() < 3 {
@@ -548,12 +682,14 @@ fn main() -> io::Result<()> {
                 println!("Uso: cd <directory_path>");
             } else {
                 let dir_path = &args[2];
-                change_directory(&mut current_directory, &root_directory, dir_path)?;
+                if let Err(e) = change_directory(&mut current_directory, &root_directory, dir_path)
+                {
+                    eprintln!("Erro ao mudar de diretório: {}", e);
+                }
             }
         }
         _ => println!("Comando desconhecido. Use 'create', 'write', ou 'remove'."),
     }
-
 
     // Salvar metadados no arquivo
     metadata_store.save_to_file(metadata_path)?;
@@ -562,7 +698,7 @@ fn main() -> io::Result<()> {
     save_directory_metadata(&root_directory, root_directory_path)?;
 
     save_hierarchy(&root_directory, &metadata_store, "filesystem.json")?;
+    save_current_directory(&current_directory, "current_directory.json")?;
 
     Ok(())
 }
-

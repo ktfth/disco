@@ -6,4 +6,5 @@ clean:
     rm filesystem.json
     rm vfs_disk.bin
     rm root_directory.json
+    rm current_directory.json
     @echo "Arquivos limpos com sucesso."
