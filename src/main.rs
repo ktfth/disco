@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use chrono::Utc;
-use std::env;
+use std::{env, fs};
 
 const BLOCK_SIZE: usize = 4096; // Tamanho de cada bloco (4 KB)
 const TOTAL_BLOCKS: usize = 1024; // Número total de blocos no disco
@@ -17,6 +17,15 @@ struct FileMetadata {
     modified_at: String,
     size: u64,
     block_indices: Vec<usize>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct DirectoryMetadata {
+    name: String,
+    created_at: String,
+    modified_at: String,
+    files: HashMap<String, FileMetadata>, // Arquivos no diretório
+    subdirectories: HashMap<String, DirectoryMetadata>, // Subdiretórios
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -79,6 +88,18 @@ fn create_file_metadata(_name: &str, permissions: &str, size: u64) -> FileMetada
 fn update_file_metadata(metadata: &mut FileMetadata, size: u64) {
     metadata.modified_at = Utc::now().to_rfc3339();
     metadata.size = size;
+}
+
+fn save_directory_metadata(directory: &DirectoryMetadata, path: &str) -> io::Result<()> {
+    let json = serde_json::to_string_pretty(directory)?;
+    fs::write(path, json)?;
+    Ok(())
+}
+
+fn load_directory_metadata(path: &str) -> io::Result<DirectoryMetadata> {
+    let json = fs::read_to_string(path)?;
+    let directory: DirectoryMetadata = serde_json::from_str(&json)?;
+    Ok(directory)
 }
 
 /// Estrutura para o gerenciador de blocos
@@ -213,6 +234,27 @@ fn create_file(
     Ok(())
 }
 
+fn create_directory(
+    name: &str,
+    parent_directory: &mut DirectoryMetadata,
+) -> io::Result<()> {
+    if parent_directory.subdirectories.contains_key(name) {
+        return Err(io::Error::new(io::ErrorKind::AlreadyExists, "Directory already exists"));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let new_directory = DirectoryMetadata {
+        name: name.to_string(),
+        created_at: now.clone(),
+        modified_at: now,
+        files: HashMap::new(),
+        subdirectories: HashMap::new(),
+    };
+
+    parent_directory.subdirectories.insert(name.to_string(), new_directory);
+    Ok(())
+}
+
 fn read_file(
     path: &str,
     metadata_store: &MetadataStore,
@@ -238,6 +280,18 @@ fn read_file(
     })?;
 
     Ok(content_str)
+}
+
+fn list_directory(directory: &DirectoryMetadata) {
+    println!("Conteúdo do diretório '{}':", directory.name);
+
+    for file in directory.files.keys() {
+        println!("Arquivo: {}", file);
+    }
+
+    for subdir in directory.subdirectories.keys() {
+        println!("Subdiretório: {}", subdir);
+    }
 }
 
 fn write_to_file(
@@ -294,6 +348,22 @@ fn remove_file(
     Ok(())
 }
 
+fn remove_directory(
+    name: &str,
+    parent_directory: &mut DirectoryMetadata,
+) -> io::Result<()> {
+    if let Some(directory) = parent_directory.subdirectories.get(name) {
+        if !directory.files.is_empty() || !directory.subdirectories.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::Other, "Directory is not empty"));
+        }
+
+        parent_directory.subdirectories.remove(name);
+        println!("Diretório '{}' removido com sucesso.", name);
+        Ok(())
+    } else {
+        Err(io::Error::new(io::ErrorKind::NotFound, "Directory not found"))
+    }
+}
 
 fn main() -> io::Result<()> {
     let metadata_path = "metadata.json";
@@ -307,6 +377,21 @@ fn main() -> io::Result<()> {
         MetadataStore::load_from_file(metadata_path)?
     } else {
         MetadataStore::new()
+    };
+
+    let root_directory_path = "root_directory.json";
+
+    // Carregar ou criar o diretório raiz
+    let mut root_directory = if Path::new(root_directory_path).exists() {
+        load_directory_metadata(root_directory_path)?
+    } else {
+        DirectoryMetadata {
+            name: "/".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            modified_at: Utc::now().to_rfc3339(),
+            files: HashMap::new(),
+            subdirectories: HashMap::new(),
+        }
     };
 
     // Obter argumentos de linha de comando
@@ -360,12 +445,34 @@ fn main() -> io::Result<()> {
                 remove_file(file_name, &mut metadata_store, &mut block_manager)?;
             }
         }
+        "mkdir" => {
+            if args.len() < 3 {
+                println!("Uso: mkdir <directory_name>");
+            } else {
+                let dir_name = &args[2];
+                create_directory(dir_name, &mut root_directory)?;
+            }
+        }
+        "ls" => {
+            list_directory(&root_directory);
+        }
+        "rmdir" => {
+            if args.len() < 3 {
+                println!("Uso: rmdir <directory_name>");
+            } else {
+                let dir_name = &args[2];
+                remove_directory(dir_name, &mut root_directory)?;
+            }
+        }
         _ => println!("Comando desconhecido. Use 'create', 'write', ou 'remove'."),
     }
 
 
     // Salvar metadados no arquivo
     metadata_store.save_to_file(metadata_path)?;
+
+    // Salvar diretório raiz antes de encerrar
+    save_directory_metadata(&root_directory, root_directory_path)?;
 
     Ok(())
 }
