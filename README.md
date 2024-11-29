@@ -30,13 +30,13 @@ Rust é conhecido por sua segurança de memória e performance, tornando-o ideal
 1. **Clone o repositório:**
 
    ```bash
-   git clone https://github.com/seu-usuario/virtual-file-system-rust.git
+   git clone https://github.com/ktfth/disco.git
    ```
 
 2. **Navegue até o diretório do projeto:**
 
    ```bash
-   cd virtual-file-system-rust
+   cd disco
    ```
 
 3. **Compile o projeto:**
@@ -55,7 +55,7 @@ Rust é conhecido por sua segurança de memória e performance, tornando-o ideal
 
 Contribuições são super bem-vindas! Se você tem ideias, sugestões ou encontrou algum problema, por favor:
 
-- Abra uma [issue](https://github.com/seu-usuario/virtual-file-system-rust/issues).
+- Abra uma [issue](https://github.com/ktfth/disco/issues).
 - Envie um pull request com melhorias.
 
 ## 📝 Licença
