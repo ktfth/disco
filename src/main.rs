@@ -4,10 +4,10 @@ use std::env;
 use std::io;
 use std::path::Path;
 
-use disco::{BlockManager, MetadataStore};
-use disco::{create_directory, change_directory, list_directory, remove_directory, save_directory_metadata, load_hierarchy, save_hierarchy, load_current_directory, save_current_directory};
-use disco::{create_file_in_directory, read_file, remove_file_from_directory, write_to_file};
-use disco::DirectoryMetadata;
+use disco::block::{BlockManager, MetadataStore};
+use disco::directory::{create_directory, change_directory, list_directory, remove_directory, save_directory_metadata, load_hierarchy, save_hierarchy, load_current_directory, save_current_directory};
+use disco::file::{create_file_in_directory, read_file, remove_file_from_directory, write_to_file};
+use disco::directory::DirectoryMetadata;
 
 fn main() -> io::Result<()> {
     let metadata_path = "metadata.json";
