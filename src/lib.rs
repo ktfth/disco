@@ -80,6 +80,7 @@ mod tests {
     #[test]
     fn test_create_and_list_directory() {
         let mut root_directory = DirectoryMetadata {
+            parent: None,
             name: "/".to_string(),
             created_at: Utc::now().to_rfc3339(),
             modified_at: Utc::now().to_rfc3339(),
@@ -95,6 +96,7 @@ mod tests {
     fn test_create_and_read_file() {
         let mut metadata_store = MetadataStore::new();
         let mut root_directory = DirectoryMetadata {
+            parent: None,
             name: "/".to_string(),
             created_at: Utc::now().to_rfc3339(),
             modified_at: Utc::now().to_rfc3339(),
@@ -127,6 +129,7 @@ mod tests {
 
         let mut metadata_store = MetadataStore::new();
         let mut root_directory = DirectoryMetadata {
+            parent: None,
             name: "/".to_string(),
             created_at: Utc::now().to_rfc3339(),
             modified_at: Utc::now().to_rfc3339(),

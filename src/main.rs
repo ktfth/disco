@@ -30,6 +30,7 @@ fn main() -> io::Result<()> {
     } else {
         (
             DirectoryMetadata {
+                parent: None,
                 name: "/".to_string(),
                 created_at: Utc::now().to_rfc3339(),
                 modified_at: Utc::now().to_rfc3339(),

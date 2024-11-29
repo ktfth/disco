@@ -12,6 +12,20 @@ pub struct DirectoryMetadata {
     pub modified_at: String,
     pub files: HashMap<String, FileMetadata>, // Arquivos no diretório
     pub subdirectories: HashMap<String, DirectoryMetadata>, // Subdiretórios
+    pub parent: Option<Box<DirectoryMetadata>>, // Referência ao diretório pai
+}
+
+impl DirectoryMetadata {
+    pub fn new(name: &str, parent: Option<Box<DirectoryMetadata>>) -> Self {
+        Self {
+            name: name.to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            modified_at: Utc::now().to_rfc3339(),
+            files: HashMap::new(),
+            subdirectories: HashMap::new(),
+            parent,
+        }
+    }
 }
 
 pub fn save_directory_metadata(directory: &DirectoryMetadata, path: &str) -> io::Result<()> {
@@ -47,6 +61,7 @@ pub fn create_directory(name: &str, parent_directory: &mut DirectoryMetadata) ->
 
     let now = Utc::now().to_rfc3339();
     let new_directory = DirectoryMetadata {
+        parent: Some(Box::new(parent_directory.clone())),
         name: name.to_string(),
         created_at: now.clone(),
         modified_at: now,
@@ -112,19 +127,22 @@ pub fn change_directory(
         current_directory.clone()
     };
 
-    for part in path.split('/') {
+    for part in path.split('/').filter(|s| !s.is_empty()) {
         if part == ".." {
-            // Voltar para o diretório pai (não implementado totalmente)
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Parent navigation not implemented",
-            ));
+            if let Some(parent) = &target.parent {
+                target = *parent.clone(); // Navegar para o diretório pai
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "No parent directory",
+                ));
+            }
         } else if let Some(subdir) = target.subdirectories.get(part) {
             target = subdir.clone();
         } else {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                "Directory not found",
+                format!("Directory '{}' not found", part),
             ));
         }
     }
